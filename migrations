@@ -1,0 +1,44 @@
+digraph "d:\\dev\\web\\site\\myproject\\blog\ migration graph" {
+	subgraph cluster__blog {
+		graph [label=blog]
+		blog__0002_faketable [label="0002_faketable"]
+		blog__0001_initial [label="0001_initial"]
+		blog__0002_faketable -> blog__0001_initial
+		blog__0003_delete_faketable [label="0003_delete_faketable"]
+		blog__0003_delete_faketable [label="0003_delete_faketable"]
+		blog__0002_faketable [label="0002_faketable"]
+		blog__0003_delete_faketable -> blog__0002_faketable
+	}
+	subgraph cluster__myapp {
+		graph [label=myapp]
+		myapp__0004_auto_20160529_0841 [label="0004_auto_20160529_0841"]
+		blog__0003_delete_faketable -> myapp__0004_auto_20160529_0841
+		myapp__0002_faketable [label="0002_faketable"]
+		myapp__0001_initial [label="0001_initial"]
+		myapp__0002_faketable -> myapp__0001_initial
+		myapp__0003_delete_faketable [label="0003_delete_faketable"]
+		myapp__0002_faketable [label="0002_faketable"]
+		myapp__0003_delete_faketable -> myapp__0002_faketable
+		myapp__0004_auto_20160529_0841 [label="0004_auto_20160529_0841"]
+		myapp__0003_delete_faketable [label="0003_delete_faketable"]
+		myapp__0004_auto_20160529_0841 -> myapp__0003_delete_faketable
+		myapp__0005_auto_20160531_1615 [label="0005_auto_20160531_1615"]
+		myapp__0004_auto_20160529_0841 [label="0004_auto_20160529_0841"]
+		myapp__0005_auto_20160531_1615 -> myapp__0004_auto_20160529_0841
+		myapp__0006_auto_20160531_1647 [label="0006_auto_20160531_1647"]
+		myapp__0005_auto_20160531_1615 [label="0005_auto_20160531_1615"]
+		myapp__0006_auto_20160531_1647 -> myapp__0005_auto_20160531_1615
+		myapp__0007_auto_20160531_1712 [label="0007_auto_20160531_1712"]
+		myapp__0006_auto_20160531_1647 [label="0006_auto_20160531_1647"]
+		myapp__0007_auto_20160531_1712 -> myapp__0006_auto_20160531_1647
+		myapp__0008_auto_20160607_1820 [label="0008_auto_20160607_1820"]
+		myapp__0007_auto_20160531_1712 [label="0007_auto_20160531_1712"]
+		myapp__0008_auto_20160607_1820 -> myapp__0007_auto_20160531_1712
+		myapp__0009_author_created_at [label="0009_author_created_at"]
+		myapp__0008_auto_20160607_1820 [label="0008_auto_20160607_1820"]
+		myapp__0009_author_created_at -> myapp__0008_auto_20160607_1820
+		myapp__0010_auto_20160608_1703 [label="0010_auto_20160608_1703"]
+		myapp__0009_author_created_at [label="0009_author_created_at"]
+		myapp__0010_auto_20160608_1703 -> myapp__0009_author_created_at
+	}
+}
