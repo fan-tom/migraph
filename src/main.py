@@ -1,15 +1,36 @@
 import ast
 import glob
-import sys
 import os
+import logging
+from argparse import ArgumentParser
 from typing import Iterable, Any, Tuple, Dict
 from graphviz import Digraph
+from graphviz.backend import FORMATS
 
-django_root = sys.argv[1]
+__version__ = "0.1.0"
+
+TRACE = 5
+logging.addLevelName(TRACE, "TRACE")
+
+
+class TraceLogger(logging.getLoggerClass()):
+    def trace(self, msg, *args, **kwargs):
+        self.log(TRACE, msg, *args, **kwargs)
+
+logging.setLoggerClass(TraceLogger)
+logging.basicConfig(level=logging.NOTSET)
+
+logger = logging.getLogger("migraph")
+
+verbosity2loglevel = {
+    0: logging.INFO,
+    1: logging.DEBUG,
+    2: TRACE
+}
 
 
 def get_migrations_paths(dj_root: str):
-    print("Finding migrations files in dir ", dj_root)
+    logger.debug("Search migrations files of project %s", dj_root)
     return glob.iglob(os.path.normpath(os.path.join(dj_root, '**/migrations/*.py')), recursive=True)
 
 
@@ -21,30 +42,26 @@ def get_dependencies(file_: Any) -> Iterable[Any]:
 
             class AssignVisitor(ast.NodeVisitor):
                 def visit_Assign(self, node: ast.Assign):
-                    print("Meet assign:", node.targets[0])
+                    logger.trace("Found assign node: %s", node.targets[0].id)
                     if len(node.targets) == 1 and node.targets[0].id == 'dependencies':
-                        print("Dependencies found:", node)
-                        migrations_id = map(lambda t: (t.elts[0].s, t.elts[1].s),
-                                            filter(lambda n: isinstance(n, ast.Tuple), node.value.elts))
-                        dependencies.extend(list(migrations_id))
+                        migrations_id = [(t.elts[0].s, t.elts[1].s) for t in
+                                         filter(lambda n: isinstance(n, ast.Tuple), node.value.elts)]
+                        logger.trace("Dependencies of %s found: %s", file_, migrations_id)
+                        dependencies.extend(migrations_id)
             if node.name == 'Migration':
-                print("Meet migration class definition:", node)
+                logger.trace("Found migration class definition in %s", file_)
                 AssignVisitor().visit(node)
 
+    logger.debug("Start processing of %s", file_)
     migration_src = open(file_, mode='r').read()
-    # print("Processing AST of module {}".format(migration_src))
     module_ = ast.parse(migration_src)  # type: ast.Module
     ClassDefVisitor().visit(module_)
+    logger.debug("Dependencies of %s: %s", file_, dependencies)
     return dependencies
 
 
-graph = Digraph(name='{} migration graph'.format(django_root), format='png')
-
-app_graphs = {}  # type: Dict[str, Digraph]
-
-
 def add_edge(from_: Tuple[str, str], to: Tuple[str, str]):
-    print("adding edge from {} to {}".format(from_, to))
+    logger.trace("Adding edge from %s to %s", from_, to)
     from_app = from_[0]
     from_migration = from_[1]
     from_name = from_app+'__'+from_migration
@@ -66,15 +83,50 @@ def get_app_migration(path: str)->(str, str):
     migration_path, migration_name = os.path.split(path)
     return os.path.basename(os.path.dirname(migration_path)), os.path.splitext(migration_name)[0]
 
-for file_path in get_migrations_paths(django_root):
-    print("Processing {} migration".format(file_path))
-    app, migration_name = get_app_migration(file_path)
-    print("app: ", app, "migration name: ", migration_name)
-    for dep in get_dependencies(file_path):
-        add_edge(from_=(app, migration_name), to=dep)
+if __name__ == "__main__":
 
+    arg_parser = ArgumentParser(prog="migraph", description="Visualize django migrations graph")
+    arg_parser.add_argument('project_path', default='.', help="path to django project")
+    arg_parser.add_argument('-o', '--output', default='.', help="where to save dot file")
+    arg_parser.add_argument('-n', '--name', default='migrations', help="name of out dot file")
+    arg_parser.add_argument('-v', '--view', action='store_true', help="open result image immediately")
+    arg_parser.add_argument('-V', '--verbose', action='count', default=0, help="verbose level. Up to 2")
+    arg_parser.add_argument('--version', action='version', version="%(prog)s "+__version__)
 
-for _, subgraph in app_graphs.items():
-    graph.subgraph(subgraph)
-print("rendering")
-graph.render('migrations')
+    image_group = arg_parser.add_mutually_exclusive_group()
+    image_group.add_argument('-f', '--format', default='svg', choices=FORMATS, help="image output format")
+    image_group.add_argument('--no-image', dest='render', action='store_false', default=True, help="don't render")
+
+    args = arg_parser.parse_args()
+
+    # handle conflict manually as argparse library does not allow one argument in multiple groups, see http://bugs.python.org/issue10984
+    if not args.render and args.view:
+        arg_parser.print_usage()
+        logger.error("migraph: error: argument -v/--view: not allowed with argument --no-image")
+
+    logger.setLevel(verbosity2loglevel[args.verbose])
+
+    django_root = args.project_path
+
+    graph = Digraph(graph_attr=dict(label="Migration graph of {} Django project".format(django_root)), name=args.name,
+                    format=args.format)
+
+    app_graphs = {}  # type: Dict[str, Digraph]
+
+    for file_path in get_migrations_paths(django_root):
+        logger.trace("Processing migration %s", file_path)
+        app, migration_name = get_app_migration(file_path)
+        logger.trace("app: %s, migration name: %s", app, migration_name)
+        for dep in get_dependencies(file_path):
+            add_edge(from_=(app, migration_name), to=dep)
+
+    for _, subgraph in app_graphs.items():
+        graph.subgraph(subgraph)
+
+    if args.render:
+        out_path = graph.render(directory=args.output, view=args.view)
+        logger.debug("Saved image to %s", os.path.abspath(out_path))
+    else:
+        out_path = graph.save(directory=args.output)
+        logger.debug("Saved dotfile to %s", os.path.abspath(out_path))
+
